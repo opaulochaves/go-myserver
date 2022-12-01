@@ -1,11 +1,14 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"math/rand"
 	"net/http"
+	"strings"
 
+	"github.com/go-chi/chi/middleware"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/render"
 )
@@ -13,15 +16,103 @@ import (
 func main() {
 	r := chi.NewRouter()
 
+	r.Use(middleware.RequestID)
+	r.Use(middleware.Logger)
+	r.Use(middleware.Recoverer)
+	r.Use(middleware.URLFormat)
+
 	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("route."))
 	})
 
 	r.Route("/notes", func(r chi.Router) {
 		r.Get("/", ListNotes)
+		r.Post("/", CreateNote)
+
+		r.Route("/{noteID}", func(r chi.Router) {
+			r.Use(NoteCtx)
+			r.Get("/", GetNote)
+		})
 	})
 
 	http.ListenAndServe(":4000", r)
+}
+
+func GetNote(w http.ResponseWriter, r *http.Request) {
+	note := r.Context().Value("note").(*Note)
+
+	if err := render.Render(w, r, NewNoteResponse(note)); err != nil {
+		render.Render(w, r, ErrRender(err))
+		return
+	}
+}
+
+// NoteRequest is the request payload for Note data model.
+//
+// NOTE: It's good practice to have well defined request and response payloads
+// so you can manage the specific inputs and outputs for clients, and also gives
+// you the opportunity to transform data on input or output, for example
+// on request, we'd like to protect certain fields and on output perhaps
+// we'd like to include a computed field based on other values that aren't
+// in the data model. Also, check out this awesome blog post on struct composition:
+// http://attilaolah.eu/2014/09/10/json-and-struct-composition-in-go/
+type NoteRequest struct {
+	*Note
+
+	User *UserPayload `json:"user,omitempty"`
+
+	ProtectedID string `json:"id"` // override 'id' json to have more control
+}
+
+func CreateNote(w http.ResponseWriter, r *http.Request) {
+	data := &NoteRequest{}
+	if err := render.Bind(r, data); err != nil {
+		render.Render(w, r, ErrInvalidRequest(err))
+		return
+	}
+
+	note := data.Note
+	dbNewNote(note)
+
+	render.Status(r, http.StatusCreated)
+	render.Render(w, r, NewNoteResponse(note))
+}
+
+func (n *NoteRequest) Bind(r *http.Request) error {
+	// n.Note is nil if no Note fields are sent in the request. Return an
+	// error to avoid a nil pointer dereference.
+	if n.Note == nil {
+		return errors.New("missing required Note fields.")
+	}
+
+	// just a post-process after a decode..
+	n.ProtectedID = ""
+	n.Note.Title = strings.ToLower(n.Note.Title)
+	return nil
+}
+
+// NoteCtx middleware is used to load an Note object from
+// the URL parameters passed through as the request. In case
+// the Note could not be found, we stop here and return a 404.
+func NoteCtx(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var note *Note
+		var err error
+
+		if noteID := chi.URLParam(r, "noteID"); noteID != "" {
+			note, err = dbGetNote(noteID)
+		} else {
+			render.Render(w, r, ErrNotFound)
+			return
+		}
+		if err != nil {
+			render.Render(w, r, ErrNotFound)
+			return
+		}
+
+		ctx := context.WithValue(r.Context(), "note", note)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
 }
 
 func ListNotes(w http.ResponseWriter, r *http.Request) {
