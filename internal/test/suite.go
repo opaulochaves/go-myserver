@@ -52,7 +52,9 @@ func (t *TSuite) TearDownTest() {
 	err := t.TX.Commit()
 	require.NoError(t.T(), err)
 
-	_, err = t.DB.Exec(fmt.Sprintf("TRUNCATE %s RESTART IDENTITY;", t.TruncateTables))
+	query := fmt.Sprintf("TRUNCATE %s RESTART IDENTITY;", t.TruncateTables)
+	_, err = t.DB.Exec(query)
+
 	require.NoError(t.T(), err)
 }
 
