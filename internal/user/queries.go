@@ -1,22 +1,23 @@
 package user
 
 import (
-	"context"
+	"fmt"
 	"time"
 
 	"github.com/jmoiron/sqlx"
 	"github.com/opaulochaves/myserver/internal/entity"
-	"github.com/opaulochaves/myserver/service"
+	"github.com/opaulochaves/myserver/internal/util"
 	"github.com/pkg/errors"
 )
 
 type UserQueries interface {
-	GetUsers() ([]entity.User, error)
+	GetUsers(offset, limit int) ([]entity.User, error)
 	GetUser(id int64) (*entity.User, error)
 	GetUserByEmail(email string) (*entity.User, error)
 	CreateUser(user *entity.User) (*entity.User, error)
 	UpdateUser(user *entity.User) (*entity.User, error)
 	DeleteUser(id int64) error
+	Count() (int, error)
 }
 
 // userQueries struct for queries from User model.
@@ -49,7 +50,7 @@ func (q *userQueries) CreateUser(u *entity.User) (*entity.User, error) {
 
 	var user entity.User
 
-	hashedPassword, err := service.HashPassword(u.Password)
+	hashedPassword, err := util.HashPassword(u.Password)
 	if err != nil {
 		return nil, errors.Wrap(err, "hashing password error")
 	}
@@ -83,28 +84,23 @@ func (q *userQueries) GetUser(id int64) (*entity.User, error) {
 	// TODO: improve what to use db? or tx? when? pass as param?
 	// right now it means I must call this function GetUser within a transaction.
 	// I don't need to always get the data within a transaction
-	err := q.tx.Get(&user, query, id)
-	if err != nil {
-		return nil, err
-	}
+	err := q.db.Get(&user, query, id)
 
-	return &user, nil
+	fmt.Println(err)
+	// TODO throw not found err if not user for the given id
+
+	return &user, err
 }
 
 // GetUsers implements UserQueries
-func (q *userQueries) GetUsers() ([]entity.User, error) {
-	// users := []entity.User{}
-	var users []entity.User
+func (q *userQueries) GetUsers(offset, limit int) ([]entity.User, error) {
+	users := []entity.User{}
 
-	query := `SELECT * FROM users`
+	query := `SELECT * FROM users ORDER BY id LIMIT $1 OFFSET $2`
 
-	err := q.db.SelectContext(context.Background(), &users, query)
+	err := q.db.Select(&users, query, limit, offset)
 
-	if err != nil {
-		return nil, err
-	}
-
-	return users, nil
+	return users, err
 }
 
 // UpdateUser implements UserQueries
@@ -119,4 +115,13 @@ func (q *userQueries) UpdateUser(u *entity.User) (*entity.User, error) {
 	}
 
 	return &user, nil
+}
+
+// TODO: use a criteria if present to count
+// Count returns the number of rows on the users table
+func (q *userQueries) Count() (int, error) {
+	var count int
+	query := `SELECT COUNT(id) FROM users`
+	err := q.db.QueryRow(query).Scan(&count)
+	return count, err
 }

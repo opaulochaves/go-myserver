@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 
+	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/jmoiron/sqlx"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"

@@ -11,6 +11,7 @@ require (
 )
 
 require (
+	github.com/asaskevich/govalidator v0.0.0-20200108200545-475eaeb16496 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
@@ -36,6 +37,7 @@ require (
 require (
 	github.com/ajg/form v1.5.1 // indirect
 	github.com/go-chi/chi v1.5.4
+	github.com/go-ozzo/ozzo-validation/v4 v4.3.0
 	github.com/golang-migrate/migrate/v4 v4.15.2
 	github.com/jmoiron/sqlx v1.3.5
 	github.com/joho/godotenv v1.4.0

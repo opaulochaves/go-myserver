@@ -13,7 +13,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/joho/godotenv"
 	"github.com/opaulochaves/myserver/config"
-	"github.com/opaulochaves/myserver/users"
+	"github.com/opaulochaves/myserver/internal/user"
 )
 
 func main() {
@@ -35,7 +35,7 @@ func main() {
 	// initialize data sources
 	ds, err := initDS(ctx, cfg)
 
-	defer ds.DBPool.Close()
+	defer ds.DB.Close()
 
 	if err != nil {
 		log.Fatalf("Unable to initialize data sources: %v\n", err)
@@ -48,17 +48,11 @@ func main() {
 	router.Use(middleware.Recoverer)
 	router.Use(middleware.URLFormat)
 
-	userRepository := users.NewUserRepository(ds.DBPool)
+	userRepo := user.NewUserQueries(ds.DB, nil)
+	userService := user.NewService(userRepo)
+	userRoutes := user.RegisterHandlers(userService)
 
-	userService := users.NewUserService(&users.USConfig{
-		UserRepository: userRepository,
-	})
-
-	userController := users.NewUserController(&users.UCConfig{
-		UserService: userService,
-	})
-
-	router.Mount("/api/users", userController.Routes())
+	router.Mount("/api/users", userRoutes)
 
 	server := &http.Server{
 		Addr:    ":" + cfg.Port,
